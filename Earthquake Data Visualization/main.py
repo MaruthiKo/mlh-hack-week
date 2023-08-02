@@ -8,11 +8,23 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
+# Helper Functions
 def extract_subarea(place):
     return place[0]
 
 def extract_area(place):
     return place[-1]
+
+def extract_date(time):
+    return str(time).split(' ')[0]
+
+def extract_weekday(time):
+    date = extract_date(time)
+    return date + ' - ' + str(time.weekday())
+
+def extract_hour(time):
+    t = str(time).split(' ')
+    return t[0] + ' - ' + t[1].split(':')[0]  
 
 # Fetch Data and clean it
 def fetch_eq_data(period= 'daily', region="Worldwide", min_mag=1):
@@ -44,4 +56,64 @@ def fetch_eq_data(period= 'daily', region="Worldwide", min_mag=1):
 
     # Convert 'time' to pd datetime 
     df_earthquake["time"] = pd.to_datetime(df_earthquake['time'])
+
+    # Set lat and long to some default if not found
+    if region in df_earthquake["area"].to_list():
+        df_earthquake = df_earthquake[df_earthquake["area"] == region]
+        max_mag = df_earthquake["mag"].max()
+        center_lat = df_earthquake[df_earthquake["mag"] == max_mag]['latitude'].values[0]
+        center_long = df_earthquake[df_earthquake["mag"] == max_mag]['longitude'].values[0]
+    else:
+        center_lat,center_long = [51,15]
+
+
+    # Set cols for animation Frame
+    # weekdays, hours, and dates
+    if period == "weekly":
+        animation_frame_col = "weekday"
+        df_earthquake[animation_frame_col] = df_earthquake["time"].apply(extract_weekday)
+    elif period == "monthly":
+        animation_frame_col = "date"
+        df_earthquake[animation_frame_col] = df_earthquake["time"].apply(extract_date)
+    else:
+        animation_frame_col = "hours"
+        df_earthquake[animation_frame_col] = df_earthquake["time"].apply(extract_hour)
+    
+    df_earthquake = df_earthquake.sort_values(by="time")
+
+    return df_earthquake, center_lat, center_long
+
+
+
+
 # Create Visualizer
+
+def visualize_eq_data(period="daily", region="Worldwide", min_mag=1):
+    df_earthquake, center_lat, center_long = fetch_eq_data(period=period,region=region,min_mag=min_mag)
+
+
+    if period == 'monthly':
+        animation_frame_col = 'date'
+    elif period == 'weekly':
+        animation_frame_col = 'weekday'
+    else: 
+        animation_frame_col = 'hours'
+
+    fig = px.scatter_mapbox(
+        data_frame=df_earthquake,
+        lat='latitude',
+        lon='longitude',
+        center=dict(lat=center_lat, lon=center_long),
+        size='mag',
+        color='mag',
+        hover_name='sub_area',
+        zoom=1,
+        mapbox_style='carto-positron',
+        animation_frame=animation_frame_col,
+        title="Earthquakes"
+    )
+
+    fig.show()
+    return None
+
+visualize_eq_data(period="monthly", region="Worldwide", min_mag=1)
